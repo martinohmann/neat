@@ -36,3 +36,14 @@ func (m Measurement) Span() int {
 	m = m.Normalize()
 	return m.Maximum - m.Minimum
 }
+
+// Sum sums up the min and max values of all passed in measurements and returns
+// a new Measurement.
+func Sum(measures ...Measurement) (sum Measurement) {
+	for _, measure := range measures {
+		sum.Minimum += measure.Minimum
+		sum.Maximum += measure.Maximum
+	}
+
+	return sum
+}

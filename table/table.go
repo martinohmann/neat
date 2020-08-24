@@ -11,8 +11,11 @@ import (
 	"github.com/martinohmann/neat/text"
 )
 
+const defaultMaxWidth = 80
+
 // Table can render properly aligned columns and rows of information.
 type Table struct {
+	out      io.Writer
 	padding  int
 	margin   int
 	maxWidth int
@@ -26,12 +29,13 @@ type Table struct {
 	cols []*tableCol
 }
 
-// New creates a new *Table of maxWidth using opts.
-func New(maxWidth int, opts ...Option) *Table {
+// New creates a new *Table which will be rendered to the provided io.Writer
+// using opts.
+func New(out io.Writer, opts ...Option) *Table {
 	t := &Table{
-		maxWidth: maxWidth,
-		padding:  1,
-		margin:   0,
+		out:     out,
+		padding: 1,
+		margin:  0,
 	}
 
 	for _, option := range opts {
@@ -44,6 +48,14 @@ func New(maxWidth int, opts ...Option) *Table {
 
 	if t.margin < 0 {
 		t.margin = 0
+	}
+
+	if t.maxWidth <= 0 {
+		if fw, ok := t.out.(console.FileWriter); ok {
+			t.maxWidth = console.TerminalWidth(fw)
+		} else {
+			t.maxWidth = defaultMaxWidth
+		}
 	}
 
 	return t
@@ -81,18 +93,26 @@ func (t *Table) AddRow(columns ...interface{}) *Table {
 	return t
 }
 
-// Render renders the table and writes the result to w. Returns the number of
+// Render renders the table to the underlying io.Writer. Returns the number of
 // lines rendered and an error if rendering failed.
-func (t *Table) Render(w io.Writer) (nlines int, err error) {
+func (t *Table) Render() (nlines int, err error) {
 	if len(t.cols) == 0 {
 		return 0, nil
 	}
 
-	measures := t.measureColumns(t.maxWidth)
+	paddingWidth := (len(t.cols) - 1) * t.padding
+	marginWidth := 2 * t.margin
+	availWidth := t.maxWidth - marginWidth - paddingWidth
+
+	measures := t.measureColumns(availWidth)
+
+	sum := measure.Sum(measures...)
+
+	totalWidth := marginWidth + paddingWidth + sum.Maximum
 
 	var sb strings.Builder
 
-	sb.Grow((t.maxWidth + 1) * len(t.rows))
+	sb.Grow(len(t.rows) * (totalWidth + 1))
 
 	marginSpaces := text.Spaces(t.margin)
 	paddingSpaces := text.Spaces(t.padding)
@@ -115,10 +135,8 @@ func (t *Table) Render(w io.Writer) (nlines int, err error) {
 		if rowHeight > 1 {
 			// Grow string buffer to have enough space to hold all lines of the
 			// table row without the need to reallocate between writing rows.
-			sb.Grow((rowHeight - 1) * (t.maxWidth + 1))
+			sb.Grow((rowHeight - 1) * (totalWidth + 1))
 		}
-
-		nlines += rowHeight
 
 		// Write all cells of the current row to the buffer and handle multiple
 		// cells.
@@ -141,31 +159,24 @@ func (t *Table) Render(w io.Writer) (nlines int, err error) {
 
 			sb.WriteString(marginSpaces)
 			sb.WriteRune('\n')
+
+			nlines++
 		}
 	}
 
-	_, err = fmt.Fprint(w, sb.String())
+	_, err = fmt.Fprint(t.out, sb.String())
 
 	return nlines, err
 }
 
-func (t *Table) measureColumns(maxWidth int) []measure.Measurement {
+func (t *Table) measureColumns(availWidth int) []measure.Measurement {
 	measures := make([]measure.Measurement, len(t.cols))
 
 	for i, col := range t.cols {
-		measures[i] = col.measure(maxWidth)
+		measures[i] = col.measure(availWidth)
 	}
 
-	paddingWidth := (len(t.cols) - 1) * t.padding
-	marginWidth := 2 * t.margin
-	availWidth := maxWidth - marginWidth - paddingWidth
-
-	var requested measure.Measurement
-
-	for _, measure := range measures {
-		requested.Minimum += measure.Minimum
-		requested.Maximum += measure.Maximum
-	}
+	requested := measure.Sum(measures...)
 
 	// Best case: columns fit nicely into the available space.
 	if requested.Maximum <= availWidth {

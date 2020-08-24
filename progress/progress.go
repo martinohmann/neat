@@ -150,9 +150,7 @@ func (p *Progress) update(cursor *terminal.Cursor) bool {
 		cursor.Up(p.displayHeight)
 	}
 
-	termWidth := console.TerminalWidth(p.out)
-
-	table := table.New(termWidth, p.tableOptions...)
+	table := table.New(p.out, p.tableOptions...)
 
 	for _, task := range p.tasks {
 		if !task.Started() {
@@ -162,7 +160,7 @@ func (p *Progress) update(cursor *terminal.Cursor) bool {
 		table.AddRow(p.tableColumns(task)...)
 	}
 
-	tableHeight, err := table.Render(p.out)
+	tableHeight, err := table.Render()
 	if err != nil {
 		panic(fmt.Errorf("failed to render task progress: %v", err))
 	}

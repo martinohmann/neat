@@ -20,6 +20,15 @@ func WithMargin(margin int) Option {
 	}
 }
 
+// WithMaxWidth sets the maximum table width. If maxWidth is <= 0, maxWidth is
+// inferred from the table's underlying io.Writer if it is a
+// console.FileWriter, otherwise a default of 80 is used.
+func WithMaxWidth(maxWidth int) Option {
+	return func(t *Table) {
+		t.maxWidth = maxWidth
+	}
+}
+
 func WithAlignment(alignments ...text.Alignment) Option {
 	return func(t *Table) {
 		t.alignments = alignments
