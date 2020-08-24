@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/martinohmann/neat/bar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -41,6 +42,10 @@ func (s *Suite) testTableRender(table *Table, expected string) {
 
 func (s *Suite) TestTable_Render() {
 	s.testTableRender(
+		New(40),
+		``,
+	)
+	s.testTableRender(
 		New(40).
 			AddRow("foo\nbarbaz", "qux"),
 		`
@@ -56,10 +61,17 @@ foo.bar
 `,
 	)
 	s.testTableRender(
+		New(13).
+			AddRow("foo", "barbaz", "qux"),
+		`
+foo.barb….qux
+`,
+	)
+	s.testTableRender(
 		New(10).
 			AddRow("foo", "bar", "baz"),
 		`
-f….b….b…
+f….bar.baz
 `,
 	)
 	s.testTableRender(
@@ -71,6 +83,47 @@ f….b….b…
 foo....bar....baz...
 foofoo.barbar.bazbaz
 1......2......foo...
+`,
+	)
+	s.testTableRender(
+		New(40).
+			AddRow(
+				"foo",
+				bar.Bar{
+					MaxWidth:       -1,
+					Completed:      10,
+					RemainingStyle: bar.NewStyle('-', nil),
+					CompletedStyle: bar.NewStyle('#', nil),
+					FinishedStyle:  bar.NewStyle('#', nil),
+				},
+				"qux",
+			),
+		`
+foo.###-----------------------------.qux
+`,
+	)
+	s.testTableRender(
+		New(18).
+			AddRow(
+				"foo",
+				bar.Bar{
+					MaxWidth:       -1,
+					Completed:      10,
+					RemainingStyle: bar.NewStyle('-', nil),
+					CompletedStyle: bar.NewStyle('#', nil),
+					FinishedStyle:  bar.NewStyle('#', nil),
+				},
+				bar.Bar{
+					MaxWidth:       -1,
+					Completed:      40,
+					RemainingStyle: bar.NewStyle('-', nil),
+					CompletedStyle: bar.NewStyle('#', nil),
+					FinishedStyle:  bar.NewStyle('#', nil),
+				},
+				"qux",
+			),
+		`
+foo.----.##---.qux
 `,
 	)
 }

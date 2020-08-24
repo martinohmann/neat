@@ -88,100 +88,53 @@ func (t *Table) Render(w io.Writer) (nlines int, err error) {
 		return 0, nil
 	}
 
-	maxWidth := t.maxWidth
-
-	dynamicCols := make([]int, 0)
-	dynamicMinWidth := 0
-	paddingWidth := (len(t.cols) - 1) * t.padding
-	marginWidth := 2 * t.margin
-	staticWidth := paddingWidth + marginWidth
-
-	// Calculate the column widths and mark dynamic columns.
-	for i, col := range t.cols {
-		col.recalculateWidth(maxWidth)
-
-		if col.width.Maximum >= maxWidth {
-			dynamicCols = append(dynamicCols, i)
-			dynamicMinWidth += col.width.Minimum
-		} else {
-			staticWidth += col.width.Maximum
-		}
-	}
-
-	remainingWidth := maxWidth - staticWidth
-
-	if remainingWidth < dynamicMinWidth {
-		staticWidth = paddingWidth + marginWidth
-		availWidth := maxWidth - staticWidth
-		maxColWidth := int(float64(availWidth) / float64(len(t.cols)))
-
-		for i, col := range t.cols {
-			if containsInt(dynamicCols, i) {
-				continue
-			}
-
-			col.recalculateWidth(maxColWidth)
-			staticWidth += col.width.Maximum
-		}
-
-		remainingWidth = maxWidth - staticWidth
-	}
-
-	remainingWidth = util.MaxInt(0, remainingWidth)
-
-	if len(dynamicCols) > 0 {
-		dynamicColWidth := int(float64(remainingWidth) / float64(len(dynamicCols)))
-
-		for _, idx := range dynamicCols {
-			t.cols[idx].recalculateWidth(dynamicColWidth)
-		}
-	}
+	measures := t.measureColumns(t.maxWidth)
 
 	var sb strings.Builder
-	sb.Grow((maxWidth + 1) * len(t.rows))
 
-	lineCount := 0
+	sb.Grow((t.maxWidth + 1) * len(t.rows))
 
 	marginSpaces := text.Spaces(t.margin)
 	paddingSpaces := text.Spaces(t.padding)
 
-	for i, row := range t.rows {
+	for _, row := range t.rows {
 		// Render all cells of the row to produce the lines that we need to
 		// calculate the row height.
-		for j := 0; j < len(row.cells); j++ {
-			col := t.cols[j]
-			cell := col.cells[i]
+		rowHeight := 0
+		cellLines := make([][]string, len(row.cells))
 
-			if cell.lines == nil {
-				rendered := cell.Render(col.width.Maximum)
+		for colIdx, cell := range row.cells {
+			rendered := cell.Render(measures[colIdx].Maximum)
+			lines := text.SplitLines(rendered)
 
-				cell.lines = text.SplitLines(rendered)
-			}
+			rowHeight = util.MaxInt(rowHeight, len(lines))
+
+			cellLines[colIdx] = lines
 		}
-
-		rowHeight := row.height()
 
 		if rowHeight > 1 {
-			sb.Grow(maxWidth + 1)
+			// Grow string buffer to have enough space to hold all lines of the
+			// table row without the need to reallocate between writing rows.
+			sb.Grow((rowHeight - 1) * (t.maxWidth + 1))
 		}
 
-		lineCount += rowHeight
+		nlines += rowHeight
 
+		// Write all cells of the current row to the buffer and handle multiple
+		// cells.
 		for lineNum := 0; lineNum < rowHeight; lineNum++ {
 			sb.WriteString(marginSpaces)
 
-			for j := 0; j < len(row.cells); j++ {
-				col := t.cols[j]
-				cell := col.cells[i]
-
-				if lineNum < len(cell.lines) {
-					sb.WriteString(cell.lines[lineNum])
+			for colIdx := range row.cells {
+				lines := cellLines[colIdx]
+				if lineNum < len(lines) {
+					sb.WriteString(lines[lineNum])
 				} else {
-					sb.WriteString(text.Spaces(col.width.Maximum))
+					sb.WriteString(text.Spaces(measures[colIdx].Maximum))
 				}
 
 				// Insert padding after each column except the last one.
-				if j < len(row.cells)-1 {
+				if colIdx < len(row.cells)-1 {
 					sb.WriteString(paddingSpaces)
 				}
 			}
@@ -193,87 +146,170 @@ func (t *Table) Render(w io.Writer) (nlines int, err error) {
 
 	_, err = fmt.Fprint(w, sb.String())
 
-	return lineCount, err
+	return nlines, err
 }
 
-func containsInt(haystack []int, needle int) bool {
-	for _, item := range haystack {
-		if item == needle {
-			return true
-		}
+func (t *Table) measureColumns(maxWidth int) []measure.Measurement {
+	measures := make([]measure.Measurement, len(t.cols))
+
+	for i, col := range t.cols {
+		measures[i] = col.measure(maxWidth)
 	}
 
-	return false
+	paddingWidth := (len(t.cols) - 1) * t.padding
+	marginWidth := 2 * t.margin
+	availWidth := maxWidth - marginWidth - paddingWidth
+
+	var requested measure.Measurement
+
+	for _, measure := range measures {
+		requested.Minimum += measure.Minimum
+		requested.Maximum += measure.Maximum
+	}
+
+	// Best case: columns fit nicely into the available space.
+	if requested.Maximum <= availWidth {
+		return measures
+	}
+
+	// Second best case: the optimal column widths overflow, but the minimum
+	// requested space fits into the available space.
+	if requested.Minimum <= availWidth {
+		return t.overflowColumns(measures, availWidth)
+	}
+
+	// Worst case: we need to truncate to fit columns.
+	return t.truncateColumns(measures, availWidth)
 }
 
-func (t *Table) makeCells(cols []interface{}) []*tableCell {
-	cells := make([]*tableCell, len(cols))
+// overflowColumns tries to allocate space for all columns first that request
+// less than the maximum width for each column if the available space is
+// distributed evenly. Columns that are still unallocated after that will receive
+// their requested minimum in the worst case, even if this exceeds the fair
+// column share.
+func (t *Table) overflowColumns(measures []measure.Measurement, availWidth int) []measure.Measurement {
+	fairColWidth := int(float64(availWidth) / float64(len(t.cols)))
+
+	remainingCols := len(t.cols)
+	unallocated := make(map[int]struct{})
+
+	for i, m := range measures {
+		if m.Maximum > fairColWidth {
+			unallocated[i] = struct{}{}
+			continue
+		}
+
+		availWidth -= m.Maximum
+		remainingCols--
+	}
+
+	for i, m := range measures {
+		if _, ok := unallocated[i]; !ok {
+			continue
+		}
+
+		fairColWidth = int(float64(availWidth) / float64(remainingCols))
+
+		width := util.MinInt(availWidth, util.MaxInt(m.Minimum, fairColWidth))
+
+		measures[i] = measure.NewMeasurement(util.MinInt(m.Minimum, width), width)
+		availWidth -= width
+		remainingCols--
+	}
+
+	return measures
+}
+
+// truncateColumns works similar to overflowColumns but aggressively truncates
+// columns if the available with is not enough to display them all. This will
+// truncate columns to less than their requested minimum if there is no other
+// option.
+func (t *Table) truncateColumns(measures []measure.Measurement, availWidth int) []measure.Measurement {
+	fairColWidth := util.MaxInt(0, int(float64(availWidth)/float64(len(t.cols))))
+
+	remainingCols := len(t.cols)
+	unallocated := make(map[int]struct{})
+
+	for i, m := range measures {
+		if m.Minimum > fairColWidth {
+			unallocated[i] = struct{}{}
+			continue
+		}
+
+		measures[i].Maximum = m.Minimum
+		availWidth -= m.Minimum
+		remainingCols--
+	}
+
+	for i := range measures {
+		if _, ok := unallocated[i]; !ok {
+			continue
+		}
+
+		width := util.MaxInt(0, int(float64(availWidth)/float64(remainingCols)))
+		measures[i] = measure.NewMeasurement(width, width)
+		availWidth -= width
+		remainingCols--
+	}
+
+	return measures
+}
+
+func (t *Table) makeCells(cols []interface{}) []console.Renderable {
+	cells := make([]console.Renderable, len(cols))
 
 	for i, col := range cols {
-		cells[i] = &tableCell{Renderable: t.makeRenderable(col, i)}
+		cells[i] = t.makeRenderable(col, i)
 	}
 
 	return cells
 }
 
-func (t *Table) columnAlignment(colIdx int) text.Alignment {
+func (t *Table) columnAlignment(colIdx int) *text.Alignment {
 	if len(t.alignments) > colIdx {
-		return t.alignments[colIdx]
+		return &t.alignments[colIdx]
 	}
 
-	return text.AlignLeft
+	return nil
 }
 
 func (t *Table) makeRenderable(v interface{}, colIdx int) console.Renderable {
 	alignment := t.columnAlignment(colIdx)
-
-	switch t := v.(type) {
-	case *text.Text:
-		tv := *t
-		tv.Alignment = alignment
-		return tv
-	case text.Text:
-		t.Alignment = alignment
-		return t
-	case console.Renderable:
-		return t
-	case string:
-		return text.Text{Text: t, Alignment: alignment}
-	case fmt.Stringer:
-		return text.Text{Text: t.String(), Alignment: alignment}
-	default:
-		return text.Text{Text: fmt.Sprint(t), Alignment: alignment}
+	// FIXME: the way we handle column alignment here needs to be improved. For
+	// now we leave it like this.
+	if alignment == nil {
+		switch t := v.(type) {
+		case console.Renderable:
+			return t
+		default:
+			return text.Text{Text: fmt.Sprint(t)}
+		}
+	} else {
+		switch t := v.(type) {
+		case *text.Text:
+			tv := *t
+			tv.Alignment = *alignment
+			return tv
+		case text.Text:
+			t.Alignment = *alignment
+			return t
+		case console.Renderable:
+			return t
+		default:
+			return text.Text{Text: fmt.Sprint(t), Alignment: *alignment}
+		}
 	}
 }
 
 type tableRow struct {
-	cells []*tableCell
-}
-
-// height returns the height of the tallest cell in the row. If called before
-// populating the lines slice of all row's cells this will return an inaccurate
-// height.
-func (r *tableRow) height() (h int) {
-	for _, cell := range r.cells {
-		h = util.MaxInt(h, len(cell.lines))
-	}
-
-	return h
-}
-
-type tableCell struct {
-	console.Renderable
-	// Populated by table.Render.
-	lines []string
+	cells []console.Renderable
 }
 
 type tableCol struct {
-	cells []*tableCell
-	// Populated by recalculateWidth.
-	width measure.Measurement
+	cells []console.Renderable
 }
 
-func (c *tableCol) recalculateWidth(maxWidth int) {
+func (c *tableCol) measure(maxWidth int) measure.Measurement {
 	var m measure.Measurement
 
 	for _, cell := range c.cells {
@@ -285,5 +321,5 @@ func (c *tableCol) recalculateWidth(maxWidth int) {
 		)
 	}
 
-	c.width = m
+	return m
 }
