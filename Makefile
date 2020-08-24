@@ -2,6 +2,7 @@
 
 GOLANGCI_LINT_VERSION ?= v1.19.1
 TEST_FLAGS ?= -race
+BENCH ?= .
 PKGS ?= $(shell go list ./... | grep -v /vendor/)
 
 .PHONY: help
@@ -11,6 +12,10 @@ help:
 .PHONY: test
 test: ## run tests
 	go test $(TEST_FLAGS) $(PKGS)
+
+.PHONY: bench
+bench: ## run benchmarks
+	go test -bench="$(BENCH)" $(PKGS)
 
 .PHONY: vet
 vet: ## run go vet
