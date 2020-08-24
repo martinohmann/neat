@@ -2,6 +2,7 @@ package table
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -13,12 +14,10 @@ import (
 func TestTable_Render(t *testing.T) {
 	assert := assert.New(t)
 
-	table := New(40)
-	table.AddRow("foo\nbarbaz", "qux")
-
 	var buf bytes.Buffer
-
-	nlines, err := table.Render(&buf)
+	table := New(&buf)
+	table.AddRow("foo\nbarbaz", "qux")
+	nlines, err := table.Render()
 	assert.NoError(err)
 	assert.Equal(2, nlines)
 	assert.Equal("foo    qux\nbarbaz    \n", buf.String())
@@ -28,57 +27,71 @@ type Suite struct {
 	suite.Suite
 }
 
-func (s *Suite) testTableRender(table *Table, expected string) {
+func (s *Suite) testTableRender(factory func(w io.Writer) *Table, expected string) {
 	var buf bytes.Buffer
 
 	// remove leading newline char
 	expected = strings.TrimLeft(expected, "\n")
 	expected = strings.ReplaceAll(expected, ".", " ")
 
-	_, err := table.Render(&buf)
+	tab := factory(&buf)
+
+	_, err := tab.Render()
 	s.NoError(err)
 	s.Equal(expected, buf.String())
 }
 
 func (s *Suite) TestTable_Render() {
 	s.testTableRender(
-		New(40),
+		func(w io.Writer) *Table {
+			return New(w)
+		},
 		``,
 	)
 	s.testTableRender(
-		New(40).
-			AddRow("foo\nbarbaz", "qux"),
+		func(w io.Writer) *Table {
+			return New(w).
+				AddRow("foo\nbarbaz", "qux")
+		},
 		`
 foo....qux
 barbaz....
 `,
 	)
 	s.testTableRender(
-		New(40).
-			AddRow("foo", "bar"),
+		func(w io.Writer) *Table {
+			return New(w, WithPadding(-1)).
+				AddRow("foo", "bar")
+		},
 		`
-foo.bar
+foobar
 `,
 	)
 	s.testTableRender(
-		New(13).
-			AddRow("foo", "barbaz", "qux"),
+		func(w io.Writer) *Table {
+			return New(w, WithMaxWidth(17), WithMargin(2)).
+				AddRow("foo", "barbaz", "qux")
+		},
 		`
-foo.barb….qux
+..foo.barb….qux..
 `,
 	)
 	s.testTableRender(
-		New(10).
-			AddRow("foo", "bar", "baz"),
+		func(w io.Writer) *Table {
+			return New(w, WithMaxWidth(10), WithMargin(-1)).
+				AddRow("foo", "bar", "baz")
+		},
 		`
 f….bar.baz
 `,
 	)
 	s.testTableRender(
-		New(30).
-			AddRow("foo", "bar", "baz").
-			AddRow("foofoo", "barbar", "bazbaz").
-			AddRow(1, 2, "foo"),
+		func(w io.Writer) *Table {
+			return New(w, WithMaxWidth(30)).
+				AddRow("foo", "bar", "baz").
+				AddRow("foofoo", "barbar", "bazbaz").
+				AddRow(1, 2, "foo")
+		},
 		`
 foo....bar....baz...
 foofoo.barbar.bazbaz
@@ -86,42 +99,46 @@ foofoo.barbar.bazbaz
 `,
 	)
 	s.testTableRender(
-		New(40).
-			AddRow(
-				"foo",
-				bar.Bar{
-					MaxWidth:       -1,
-					Completed:      10,
-					RemainingStyle: bar.NewStyle('-', nil),
-					CompletedStyle: bar.NewStyle('#', nil),
-					FinishedStyle:  bar.NewStyle('#', nil),
-				},
-				"qux",
-			),
+		func(w io.Writer) *Table {
+			return New(w, WithMaxWidth(40)).
+				AddRow(
+					"foo",
+					bar.Bar{
+						MaxWidth:       -1,
+						Completed:      10,
+						RemainingStyle: bar.NewStyle('-', nil),
+						CompletedStyle: bar.NewStyle('#', nil),
+						FinishedStyle:  bar.NewStyle('#', nil),
+					},
+					"qux",
+				)
+		},
 		`
 foo.###-----------------------------.qux
 `,
 	)
 	s.testTableRender(
-		New(18).
-			AddRow(
-				"foo",
-				bar.Bar{
-					MaxWidth:       -1,
-					Completed:      10,
-					RemainingStyle: bar.NewStyle('-', nil),
-					CompletedStyle: bar.NewStyle('#', nil),
-					FinishedStyle:  bar.NewStyle('#', nil),
-				},
-				bar.Bar{
-					MaxWidth:       -1,
-					Completed:      40,
-					RemainingStyle: bar.NewStyle('-', nil),
-					CompletedStyle: bar.NewStyle('#', nil),
-					FinishedStyle:  bar.NewStyle('#', nil),
-				},
-				"qux",
-			),
+		func(w io.Writer) *Table {
+			return New(w, WithMaxWidth(18)).
+				AddRow(
+					"foo",
+					bar.Bar{
+						MaxWidth:       -1,
+						Completed:      10,
+						RemainingStyle: bar.NewStyle('-', nil),
+						CompletedStyle: bar.NewStyle('#', nil),
+						FinishedStyle:  bar.NewStyle('#', nil),
+					},
+					bar.Bar{
+						MaxWidth:       -1,
+						Completed:      40,
+						RemainingStyle: bar.NewStyle('-', nil),
+						CompletedStyle: bar.NewStyle('#', nil),
+						FinishedStyle:  bar.NewStyle('#', nil),
+					},
+					"qux",
+				)
+		},
 		`
 foo.----.##---.qux
 `,
