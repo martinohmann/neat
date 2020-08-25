@@ -11,16 +11,38 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func TestTable_Render(t *testing.T) {
+func TestTable_Render_Reset(t *testing.T) {
 	assert := assert.New(t)
 
 	var buf bytes.Buffer
 	table := New(&buf)
-	table.AddRow("foo\nbarbaz", "qux")
+	table.AddRow("foo\nbarbaz", "qux").AddRow("one", "two")
+
 	nlines, err := table.Render()
 	assert.NoError(err)
-	assert.Equal(2, nlines)
-	assert.Equal("foo    qux\nbarbaz    \n", buf.String())
+	assert.Equal(3, nlines)
+	assert.Equal("foo    qux\nbarbaz    \none    two\n", buf.String())
+
+	buf.Reset()
+	table.Reset()
+
+	table.AddRow("foo", "bar", "baz")
+
+	nlines, err = table.Render()
+	assert.NoError(err)
+	assert.Equal(1, nlines)
+	assert.Equal("foo bar baz\n", buf.String())
+}
+
+func TestTable_AddRow_Panic(t *testing.T) {
+	defer func() {
+		if err := recover(); err == nil {
+			t.Fatal("expected panic")
+		}
+	}()
+
+	var buf bytes.Buffer
+	New(&buf).AddRow("foo", "bar").AddRow("baz")
 }
 
 type Suite struct {
@@ -56,6 +78,16 @@ func (s *Suite) TestTable_Render() {
 		`
 foo....qux
 barbaz....
+`,
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w, WithPadding(3)).
+				AddRow("foo\nbarbaz", "qux")
+		},
+		`
+foo......qux
+barbaz......
 `,
 	)
 	s.testTableRender(

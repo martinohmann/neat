@@ -69,6 +69,14 @@ func (t *Table) mustFitWidth(cols []interface{}) {
 	panic(fmt.Sprintf("expected %d columns, got %d", len(t.rows[0].cells), len(cols)))
 }
 
+// Reset resets the table by clearing all rows. This is useful for creating
+// multiple tables with the same options.
+func (t *Table) Reset() *Table {
+	t.rows = nil
+	t.cols = nil
+	return t
+}
+
 // AddRow adds a row to the table. Panics if the number of columns does not
 // align with the number of columns of already existing table rows.
 func (t *Table) AddRow(columns ...interface{}) *Table {
@@ -106,9 +114,9 @@ func (t *Table) Render() (nlines int, err error) {
 
 	measures := t.measureColumns(availWidth)
 
-	sum := measure.Sum(measures...)
+	columnWidths := measure.Sum(measures...)
 
-	totalWidth := marginWidth + paddingWidth + sum.Maximum
+	totalWidth := marginWidth + paddingWidth + columnWidths.Maximum
 
 	var sb strings.Builder
 

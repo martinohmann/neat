@@ -24,7 +24,7 @@ func WithColumns(columns ...Column) Option {
 	}
 }
 
-// WidthTableOptions sets the options for the underlying table used for
+// WithTableOptions sets the options for the underlying table used for
 // rendering the progress of all tasks.
 func WithTableOptions(opts ...table.Option) Option {
 	return func(p *Progress) {
