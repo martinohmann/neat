@@ -1,6 +1,9 @@
 package table
 
-import "github.com/martinohmann/neat/text"
+import (
+	"github.com/martinohmann/neat/style"
+	"github.com/martinohmann/neat/text"
+)
 
 // Option is a func for configuring a *Table.
 type Option func(t *Table)
@@ -13,7 +16,7 @@ func WithPadding(padding int) Option {
 	}
 }
 
-// WidthMargin sets the left and right margin of table rows. Defaults to 0.
+// WithMargin sets the left and right margin of table rows. Defaults to 0.
 func WithMargin(margin int) Option {
 	return func(t *Table) {
 		t.margin = margin
@@ -26,6 +29,33 @@ func WithMargin(margin int) Option {
 func WithMaxWidth(maxWidth int) Option {
 	return func(t *Table) {
 		t.maxWidth = maxWidth
+	}
+}
+
+// WithBorderMask controls the borders that should be displayed using a bit
+// mask.
+func WithBorderMask(mask BorderMask) Option {
+	return func(t *Table) {
+		t.borderMask = mask
+	}
+}
+
+// WithBorderRunes sets the runes that should be rendered for the individual
+// border elements, e.g. corners, vertical and horizontal lines and junctions.
+// See the documentation of DefaultBorderRunes for an example. It is valid to
+// pass a rune mapping for a subset of the required border runes. Missing runes
+// will be filled with the corresponding runes from DefaultBorderRunes.
+func WithBorderRunes(runes BorderRunes) Option {
+	return func(t *Table) {
+		t.borderRunes = runes
+	}
+}
+
+// WithBorderStyle sets the style the should be applied to each border element.
+// The default is to not apply any style.
+func WithBorderStyle(style *style.Style) Option {
+	return func(t *Table) {
+		t.borderStyle = style
 	}
 }
 

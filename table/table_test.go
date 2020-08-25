@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/martinohmann/neat/bar"
+	"github.com/martinohmann/neat/style"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -64,6 +65,8 @@ func (s *Suite) testTableRender(factory func(w io.Writer) *Table, expected strin
 }
 
 func (s *Suite) TestTable_Render() {
+	defer style.Enable()()
+
 	s.testTableRender(
 		func(w io.Writer) *Table {
 			return New(w)
@@ -174,6 +177,90 @@ foo.###-----------------------------.qux
 		`
 foo.----.##---.qux
 `,
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w, WithBorderMask(BorderAll)).
+				AddRow("foo", "bar", "baz").
+				AddRow("foofoo", "barbar", "bazbaz").
+				AddRow(1, 2, "foo")
+		},
+		`
+┌────────┬────────┬────────┐
+│ foo    │ bar    │ baz    │
+├────────┼────────┼────────┤
+│ foofoo │ barbar │ bazbaz │
+├────────┼────────┼────────┤
+│ 1      │ 2      │ foo    │
+└────────┴────────┴────────┘
+`,
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w, WithBorderMask(BorderRow)).
+				AddRow("foo", "bar", "baz").
+				AddRow("foofoo", "barbar", "bazbaz").
+				AddRow(1, 2, "foo")
+		},
+		`
+foo    bar    baz   
+────────────────────
+foofoo barbar bazbaz
+────────────────────
+1      2      foo   
+`,
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w, WithBorderMask(BorderRow|BorderColumn)).
+				AddRow("foo", "bar", "baz").
+				AddRow("foofoo", "barbar", "bazbaz").
+				AddRow(1, 2, "foo")
+		},
+		`
+foo    │ bar    │ baz   
+───────┼────────┼───────
+foofoo │ barbar │ bazbaz
+───────┼────────┼───────
+1      │ 2      │ foo   
+`,
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w, WithBorderMask(BorderAllVertical)).
+				AddRow("foo", "bar", "baz").
+				AddRow("foofoo", "barbar", "bazbaz").
+				AddRow(1, 2, "foo")
+		},
+		`
+│ foo    │ bar    │ baz    │
+│ foofoo │ barbar │ bazbaz │
+│ 1      │ 2      │ foo    │
+`,
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w, WithBorderMask(BorderAll^BorderRow)).
+				AddRow("foo", "bar", "baz").
+				AddRow("foofoo", "barbar", "bazbaz").
+				AddRow(1, 2, "foo")
+		},
+		`
+┌────────┬────────┬────────┐
+│ foo    │ bar    │ baz    │
+│ foofoo │ barbar │ bazbaz │
+│ 1      │ 2      │ foo    │
+└────────┴────────┴────────┘
+`,
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w, WithBorderMask(BorderAll), WithBorderStyle(style.New(style.FgBlack))).
+				AddRow("foo", "bar")
+		},
+		"\x1b[30m┌\x1b[0m\x1b[30m─\x1b[0m\x1b[30m───\x1b[0m\x1b[30m─\x1b[0m\x1b[30m┬\x1b[0m\x1b[30m─\x1b[0m\x1b[30m───\x1b[0m\x1b[30m─\x1b[0m\x1b[30m┐\x1b[0m\n"+
+			"\x1b[30m│\x1b[0m foo \x1b[30m│\x1b[0m bar \x1b[30m│\x1b[0m\n"+
+			"\x1b[30m└\x1b[0m\x1b[30m─\x1b[0m\x1b[30m───\x1b[0m\x1b[30m─\x1b[0m\x1b[30m┴\x1b[0m\x1b[30m─\x1b[0m\x1b[30m───\x1b[0m\x1b[30m─\x1b[0m\x1b[30m┘\x1b[0m\n",
 	)
 }
 

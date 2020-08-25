@@ -3,12 +3,13 @@ package table
 import (
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/martinohmann/neat/console"
 	"github.com/martinohmann/neat/internal/util"
 	"github.com/martinohmann/neat/measure"
+	"github.com/martinohmann/neat/style"
 	"github.com/martinohmann/neat/text"
+	runewidth "github.com/mattn/go-runewidth"
 )
 
 const defaultMaxWidth = 80
@@ -19,6 +20,10 @@ type Table struct {
 	padding  int
 	margin   int
 	maxWidth int
+
+	borderMask  BorderMask
+	borderRunes BorderRunes
+	borderStyle *style.Style
 
 	alignments []text.Alignment
 
@@ -38,6 +43,12 @@ func New(out io.Writer, opts ...Option) *Table {
 		margin:  0,
 	}
 
+	t.applyOptions(opts)
+
+	return t
+}
+
+func (t *Table) applyOptions(opts []Option) {
 	for _, option := range opts {
 		option(t)
 	}
@@ -58,7 +69,15 @@ func New(out io.Writer, opts ...Option) *Table {
 		}
 	}
 
-	return t
+	if t.borderRunes == nil {
+		t.borderRunes = DefaultBorderRunes
+	} else {
+		for k := range DefaultBorderRunes {
+			if _, ok := t.borderRunes[k]; !ok {
+				t.borderRunes[k] = DefaultBorderRunes[k]
+			}
+		}
+	}
 }
 
 func (t *Table) mustFitWidth(cols []interface{}) {
@@ -101,80 +120,111 @@ func (t *Table) AddRow(columns ...interface{}) *Table {
 	return t
 }
 
+// calculateSpacing calculates the width and height occupied by spacing like
+// padding, margin and borders.
+func (t *Table) calculateSpacing() (width, height int) {
+	borderWidth := 0
+	paddingWidth := (len(t.cols) - 1) * t.padding
+	marginWidth := 2 * t.margin
+
+	width = marginWidth + paddingWidth
+
+	for _, r := range t.borderRunes {
+		borderWidth = util.MaxInt(borderWidth, runewidth.RuneWidth(r))
+	}
+
+	if t.borderMask.Has(BorderColumn) {
+		// If we have vertical borders we need to have double the padding: left
+		// and right from the border.
+		width += paddingWidth + ((len(t.cols) - 1) * borderWidth)
+	}
+
+	if t.borderMask.Has(BorderLeft) {
+		width += t.padding + borderWidth
+	}
+
+	if t.borderMask.Has(BorderRight) {
+		width += t.padding + borderWidth
+	}
+
+	if t.borderMask.Has(BorderTop) {
+		height++
+	}
+
+	if t.borderMask.Has(BorderRow) {
+		height += len(t.rows) - 1
+	}
+
+	if t.borderMask.Has(BorderBottom) {
+		height++
+	}
+
+	return width, height
+}
+
 // Render renders the table to the underlying io.Writer. Returns the number of
 // lines rendered and an error if rendering failed.
-func (t *Table) Render() (nlines int, err error) {
+func (t *Table) Render() (int, error) {
 	if len(t.cols) == 0 {
 		return 0, nil
 	}
 
-	paddingWidth := (len(t.cols) - 1) * t.padding
-	marginWidth := 2 * t.margin
-	availWidth := t.maxWidth - marginWidth - paddingWidth
+	spacingWidth, spacingHeight := t.calculateSpacing()
+	availWidth := t.maxWidth - spacingWidth
 
 	measures := t.measureColumns(availWidth)
-
 	columnWidths := measure.Sum(measures...)
 
-	totalWidth := marginWidth + paddingWidth + columnWidths.Maximum
+	totalWidth := spacingWidth + columnWidths.Maximum
 
-	var sb strings.Builder
+	tb := newTableBuilder(t, measures)
 
-	sb.Grow(len(t.rows) * (totalWidth + 1))
+	tb.Grow((len(t.rows) + spacingHeight) * (totalWidth + 1))
 
-	marginSpaces := text.Spaces(t.margin)
-	paddingSpaces := text.Spaces(t.padding)
+	if t.borderMask.Has(BorderTop) {
+		tb.writeBorderLine(BorderRuneCornerTopLeft, BorderRuneIntersectionTop, BorderRuneCornerTopRight)
+	}
 
-	for _, row := range t.rows {
-		// Render all cells of the row to produce the lines that we need to
-		// calculate the row height.
-		rowHeight := 0
-		cellLines := make([][]string, len(row.cells))
+	for i, row := range t.rows {
+		cellLines, maxCellHeight := renderRowCells(row, measures)
 
-		for colIdx, cell := range row.cells {
-			rendered := cell.Render(measures[colIdx].Maximum)
-			lines := text.SplitLines(rendered)
-
-			rowHeight = util.MaxInt(rowHeight, len(lines))
-
-			cellLines[colIdx] = lines
+		if maxCellHeight > 1 {
+			// Grow buffer to have enough space to hold all lines of the table
+			// row without the need to reallocate between writing the lines of
+			// the row.
+			tb.Grow((maxCellHeight - 1) * (totalWidth + 1))
 		}
 
-		if rowHeight > 1 {
-			// Grow string buffer to have enough space to hold all lines of the
-			// table row without the need to reallocate between writing rows.
-			sb.Grow((rowHeight - 1) * (totalWidth + 1))
-		}
+		tb.writeRowCells(cellLines, maxCellHeight)
 
-		// Write all cells of the current row to the buffer and handle multiple
-		// cells.
-		for lineNum := 0; lineNum < rowHeight; lineNum++ {
-			sb.WriteString(marginSpaces)
-
-			for colIdx := range row.cells {
-				lines := cellLines[colIdx]
-				if lineNum < len(lines) {
-					sb.WriteString(lines[lineNum])
-				} else {
-					sb.WriteString(text.Spaces(measures[colIdx].Maximum))
-				}
-
-				// Insert padding after each column except the last one.
-				if colIdx < len(row.cells)-1 {
-					sb.WriteString(paddingSpaces)
-				}
-			}
-
-			sb.WriteString(marginSpaces)
-			sb.WriteRune('\n')
-
-			nlines++
+		if t.borderMask.Has(BorderRow) && i < len(t.rows)-1 {
+			tb.writeBorderLine(BorderRuneIntersectionLeft, BorderRuneIntersectionCenter, BorderRuneIntersectionRight)
 		}
 	}
 
-	_, err = fmt.Fprint(t.out, sb.String())
+	if t.borderMask.Has(BorderBottom) {
+		tb.writeBorderLine(BorderRuneCornerBottomLeft, BorderRuneIntersectionBottom, BorderRuneCornerBottomRight)
+	}
 
-	return nlines, err
+	return tb.render()
+}
+
+// renderRowCells renders all cells of the row to produce the lines that we
+// need to calculate the row height. Returns a slice of slices of lines for
+// each column in the row and the maximum column height.
+func renderRowCells(row *tableRow, measures []measure.Measurement) (cellLines [][]string, maxHeight int) {
+	cellLines = make([][]string, len(row.cells))
+
+	for colIdx, cell := range row.cells {
+		rendered := cell.Render(measures[colIdx].Maximum)
+		lines := text.SplitLines(rendered)
+
+		maxHeight = util.MaxInt(maxHeight, len(lines))
+
+		cellLines[colIdx] = lines
+	}
+
+	return cellLines, maxHeight
 }
 
 func (t *Table) measureColumns(availWidth int) []measure.Measurement {
