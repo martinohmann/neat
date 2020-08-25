@@ -99,7 +99,7 @@ func toRGB(v uint32) (r uint8, g uint8, b uint8) {
 	return
 }
 
-// NewWith creates a new Color from c with additional attributes. Color c is
+// NewWith creates a new *Style from s with additional attributes. Style s is
 // not altered.
 func (s *Style) NewWith(attrs ...Attribute) *Style {
 	n := s.Copy()
@@ -110,15 +110,15 @@ func (s *Style) Copy() *Style {
 	return newStyle(s.attrs)
 }
 
-// Add adds attributes to an existing color.
+// Add adds attributes to an existing style.
 func (s *Style) Add(attrs ...Attribute) *Style {
 	return s.add(attrs)
 }
 
 func (s *Style) add(attrs []Attribute) *Style {
 	for _, attr := range attrs {
-		if color, ok := attr.(*Style); ok {
-			s.attrs = append(s.attrs, color.attrs...)
+		if style, ok := attr.(*Style); ok {
+			s.attrs = append(s.attrs, style.attrs...)
 		} else {
 			s.attrs = append(s.attrs, attr)
 		}

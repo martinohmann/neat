@@ -165,7 +165,7 @@ var (
 		"bgmagenta": BgMagenta,
 		"bgcyan":    BgCyan,
 		"bgwhite":   BgWhite,
-		"bcolor":    BgColor,
+		"bgcolor":   BgColor,
 		"bgdefault": BgDefault,
 
 		// 90-97
