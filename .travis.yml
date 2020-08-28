@@ -4,14 +4,15 @@ sudo: false
 go:
   - "1.14"
   - tip
-env:
-  global:
-    - GO111MODULE=on
 branches:
   # don't build pull requests twice
   only:
     - master
     - /^v\d+\.\d+\.\d+$/
+jobs:
+  fast_finish: true
+  allow_failures:
+    - go: tip
 cache:
   directories:
     - $HOME/.cache/go-build
