@@ -3,10 +3,15 @@ language: go
 sudo: false
 go:
   - "1.14"
-  - "tip"
+  - tip
 env:
   global:
     - GO111MODULE=on
+branches:
+  # don't build pull requests twice
+  only:
+    - master
+    - /^v\d+\.\d+\.\d+$/
 cache:
   directories:
     - $HOME/.cache/go-build
@@ -14,3 +19,5 @@ cache:
 script:
   - make coverage
   - make lint
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
