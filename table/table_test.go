@@ -8,9 +8,12 @@ import (
 
 	"github.com/martinohmann/neat/bar"
 	"github.com/martinohmann/neat/style"
+	"github.com/martinohmann/neat/text"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
+
+const lorem = "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet."
 
 func TestTable_Render_Reset(t *testing.T) {
 	assert := assert.New(t)
@@ -261,6 +264,77 @@ foofoo │ barbar │ bazbaz
 		"\x1b[30m┌\x1b[0m\x1b[30m─\x1b[0m\x1b[30m───\x1b[0m\x1b[30m─\x1b[0m\x1b[30m┬\x1b[0m\x1b[30m─\x1b[0m\x1b[30m───\x1b[0m\x1b[30m─\x1b[0m\x1b[30m┐\x1b[0m\n"+
 			"\x1b[30m│\x1b[0m foo \x1b[30m│\x1b[0m bar \x1b[30m│\x1b[0m\n"+
 			"\x1b[30m└\x1b[0m\x1b[30m─\x1b[0m\x1b[30m───\x1b[0m\x1b[30m─\x1b[0m\x1b[30m┴\x1b[0m\x1b[30m─\x1b[0m\x1b[30m───\x1b[0m\x1b[30m─\x1b[0m\x1b[30m┘\x1b[0m\n",
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w, WithMaxWidth(14), WithWordWrap(true)).
+				AddRow("foo bar", "baz qux")
+		},
+		`
+foo....baz.qux
+bar...........
+`,
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w, WithMaxWidth(12), WithColumnWordWrap(false, true)).
+				AddRow("foo bar", "baz qux")
+		},
+		`
+foo.….baz...
+......qux...
+`,
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w,
+				WithBorderMask(BorderAll),
+				WithWordWrap(true),
+				WithAlignment(text.AlignRight)).
+				AddRow(lorem[:75], lorem[:75])
+		},
+		`
+┌──────────────────────────────────────┬───────────────────────────────────────┐
+│          Lorem ipsum dolor sit amet, │           Lorem ipsum dolor sit amet, │
+│     consetetur sadipscing elitr, sed │ consetetur sadipscing elitr, sed diam │
+│                       diam nonumy ei │                             nonumy ei │
+└──────────────────────────────────────┴───────────────────────────────────────┘
+`,
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w,
+				WithBorderMask(BorderAll),
+				WithWordWrap(true),
+				WithColumnAlignment(text.AlignLeft, text.AlignJustify, text.AlignRight, text.AlignCenter)).
+				AddRow(lorem[:75], lorem[:75], lorem[:75], lorem[:75])
+		},
+		`
+┌──────────────────┬───────────────────┬───────────────────┬───────────────────┐
+│ Lorem ipsum      │ Lorem ipsum dolor │ Lorem ipsum dolor │ Lorem ipsum dolor │
+│ dolor sit amet,  │ sit         amet, │         sit amet, │     sit amet,     │
+│ consetetur       │ consetetur        │        consetetur │    consetetur     │
+│ sadipscing       │ sadipscing elitr, │ sadipscing elitr, │ sadipscing elitr, │
+│ elitr, sed diam  │ sed  diam  nonumy │   sed diam nonumy │  sed diam nonumy  │
+│ nonumy ei        │ ei                │                ei │        ei         │
+└──────────────────┴───────────────────┴───────────────────┴───────────────────┘
+`,
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w,
+				WithStyle(style.New(style.Bold))).
+				AddRow("foo", "bar")
+		},
+		"\x1b[1mfoo\x1b[0m \x1b[1mbar\x1b[0m\n",
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w,
+				WithColumnStyle(style.New(style.Bold))).
+				AddRow("foo", "bar")
+		},
+		"\x1b[1mfoo\x1b[0m bar\n",
 	)
 }
 
