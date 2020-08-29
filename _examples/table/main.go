@@ -17,7 +17,9 @@ func main() {
 	opts := []table.Option{
 		table.WithPadding(1),
 		table.WithMargin(2),
-		table.WithAlignment(text.AlignLeft, text.AlignJustify, text.AlignRight),
+		table.WithColumnAlignment(text.AlignLeft, text.AlignJustify, text.AlignRight),
+		table.WithAlignment(text.AlignRight),
+		table.WithWordWrap(true),
 		table.WithBorderMask(table.BorderAll),
 		table.WithBorderStyle(style.New(style.Bold, style.FgBlack)),
 	}
@@ -44,7 +46,7 @@ func main() {
 	}
 
 	t.AddRow(bold.Sprint("left aligned"), bold.Sprint("justify + wordwrap"), bold.Sprint("right aligned"))
-	t.AddRow(left, center, right)
+	t.AddRow(lorem, lorem, lorem)
 	t.AddRow(left.Text[:100], center, right)
 
 	t.Render()

@@ -25,7 +25,15 @@ type Table struct {
 	borderRunes BorderRunes
 	borderStyle *style.Style
 
-	alignments []text.Alignment
+	// global cell attributes
+	alignment text.Alignment
+	style     *style.Style
+	wordWrap  bool
+
+	// per-column cell attributes
+	columnAlignment []text.Alignment
+	columnStyle     []*style.Style
+	columnWordWrap  []bool
 
 	// rows and cols contain pointers to exactly the same cells, only in
 	// different orientation. This helps to simplify calculation of column
@@ -98,6 +106,11 @@ func (t *Table) Reset() *Table {
 
 // AddRow adds a row to the table. Panics if the number of columns does not
 // align with the number of columns of already existing table rows.
+//
+// Columns implementing console.Renderable are NOT formatted using the cell and
+// column specific options (e.g. style, alignment, word wrap) configured via
+// the table.With* and table.WithColumn* option funcs. This allows users to add
+// custom cell behaviour if needed.
 func (t *Table) AddRow(columns ...interface{}) *Table {
 	t.mustFitWidth(columns)
 
@@ -334,40 +347,35 @@ func (t *Table) makeCells(cols []interface{}) []console.Renderable {
 	return cells
 }
 
-func (t *Table) columnAlignment(colIdx int) *text.Alignment {
-	if len(t.alignments) > colIdx {
-		return &t.alignments[colIdx]
+func (t *Table) makeRenderable(v interface{}, colIdx int) console.Renderable {
+	if r, ok := v.(console.Renderable); ok {
+		return r
 	}
 
-	return nil
+	return t.makeTextRenderable(v, colIdx)
 }
 
-func (t *Table) makeRenderable(v interface{}, colIdx int) console.Renderable {
-	alignment := t.columnAlignment(colIdx)
-	// FIXME: the way we handle column alignment here needs to be improved. For
-	// now we leave it like this.
-	if alignment == nil {
-		switch t := v.(type) {
-		case console.Renderable:
-			return t
-		default:
-			return text.Text{Text: fmt.Sprint(t)}
-		}
-	} else {
-		switch t := v.(type) {
-		case *text.Text:
-			tv := *t
-			tv.Alignment = *alignment
-			return tv
-		case text.Text:
-			t.Alignment = *alignment
-			return t
-		case console.Renderable:
-			return t
-		default:
-			return text.Text{Text: fmt.Sprint(t), Alignment: *alignment}
-		}
+func (t *Table) makeTextRenderable(v interface{}, colIdx int) console.Renderable {
+	r := text.Text{
+		Alignment: t.alignment,
+		Style:     t.style,
+		Text:      fmt.Sprint(v),
+		WordWrap:  t.wordWrap,
 	}
+
+	if colIdx < len(t.columnAlignment) {
+		r.Alignment = t.columnAlignment[colIdx]
+	}
+
+	if colIdx < len(t.columnStyle) {
+		r.Style = t.columnStyle[colIdx]
+	}
+
+	if colIdx < len(t.columnWordWrap) {
+		r.WordWrap = t.columnWordWrap[colIdx]
+	}
+
+	return r
 }
 
 type tableRow struct {

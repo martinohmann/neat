@@ -59,8 +59,59 @@ func WithBorderStyle(style *style.Style) Option {
 	}
 }
 
-func WithAlignment(alignments ...text.Alignment) Option {
+// WithAlignment sets the default alignment for all table cells. Can be
+// overridden per table column via WithColumnAlignment. The alignment is
+// ignored for console.Renderable values passed to table.AddRow as these may
+// have their own alignment rules. See the documentation of table.AddRow.
+func WithAlignment(alignment text.Alignment) Option {
 	return func(t *Table) {
-		t.alignments = alignments
+		t.alignment = alignment
+	}
+}
+
+// WithAlignment sets the default style for all table cells. Can be overridden
+// per table column via WithColumnStyle. The style is ignored for
+// console.Renderable values passed to table.AddRow as these may have their own
+// style rules. See the documentation of table.AddRow.
+func WithStyle(style *style.Style) Option {
+	return func(t *Table) {
+		t.style = style
+	}
+}
+
+// WithWordWrap sets the default word wrapping behaviour for all table cells.
+// If true, cells are word wrapped if width constraints make this necessary.
+// Otherwise, cells are not word wrapped but may be truncated if they exceed
+// the width constraints. Can be overridden per table column via
+// WithColumnWordWrap. The word wrap config is ignored for console.Renderable
+// values passed to table.AddRow as these may have their own word wrapping
+// rules. See the documentation of table.AddRow.
+func WithWordWrap(wrap bool) Option {
+	return func(t *Table) {
+		t.wordWrap = wrap
+	}
+}
+
+// WithColumnAlignment configures the cell alignment per column. See
+// documentation of WithAlignment.
+func WithColumnAlignment(alignment ...text.Alignment) Option {
+	return func(t *Table) {
+		t.columnAlignment = alignment
+	}
+}
+
+// WithColumnStyle configures the cell style per column. See
+// documentation of WithStyle.
+func WithColumnStyle(style ...*style.Style) Option {
+	return func(t *Table) {
+		t.columnStyle = style
+	}
+}
+
+// WithWordWrap configures the cell word wrapping behaviour per column. See
+// documentation of WithWordWrap.
+func WithColumnWordWrap(wrap ...bool) Option {
+	return func(t *Table) {
+		t.columnWordWrap = wrap
 	}
 }
