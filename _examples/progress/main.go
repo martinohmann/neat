@@ -7,6 +7,7 @@ import (
 	"github.com/martinohmann/neat/bar"
 	"github.com/martinohmann/neat/progress"
 	"github.com/martinohmann/neat/style"
+	"github.com/martinohmann/neat/table"
 	"github.com/martinohmann/neat/text"
 )
 
@@ -34,6 +35,9 @@ func main() {
 				CompletedStyle: bar.NewStyle('❯', style.New(style.FgRed)),
 			},
 			progress.NewPercentageColumn(),
+		),
+		progress.WithTableOptions(
+			table.WithBorderMask(table.BorderTop | table.BorderBottom),
 		),
 	}
 

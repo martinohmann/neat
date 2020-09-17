@@ -107,6 +107,7 @@ func (p *Progress) run() {
 	cursor := &terminal.Cursor{Out: p.out}
 
 	defer func() {
+		p.Stop()
 		// Reset the cursor and unblock all waiters.
 		cursor.HorizontalAbsolute(0)
 		cursor.Show()
@@ -118,33 +119,32 @@ func (p *Progress) run() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	var finished bool
-
 	for {
 		select {
 		case task := <-p.addCh:
 			p.tasks = append(p.tasks, task)
 		case <-p.notifyCh:
-			finished = p.update(cursor)
+			p.update(cursor)
 		case <-ticker.C:
-			finished = p.update(cursor)
+			p.update(cursor)
 		case <-p.stopCh:
 			return
 		}
 
-		if finished {
+		if p.finished() {
 			return
 		}
 	}
 }
 
 // update renders the progress for all started tasks and repositions the
-// cursor. Returns true if all tasks are finished.
-func (p *Progress) update(cursor *terminal.Cursor) bool {
+// cursor.
+func (p *Progress) update(cursor *terminal.Cursor) {
 	if len(p.tasks) == 0 {
-		return false
+		return
 	}
 
+	// Reposition cursor to start of the first progress line.
 	cursor.HorizontalAbsolute(0)
 	if p.displayHeight > 0 {
 		cursor.Up(p.displayHeight)
@@ -166,12 +166,14 @@ func (p *Progress) update(cursor *terminal.Cursor) bool {
 	}
 
 	p.displayHeight = tableHeight
-
-	return p.finished()
 }
 
 // finished returns true if all tasks for this progress are finished.
 func (p *Progress) finished() bool {
+	if len(p.tasks) == 0 {
+		return false
+	}
+
 	for _, task := range p.tasks {
 		if !task.Finished() {
 			return false
