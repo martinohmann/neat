@@ -17,8 +17,9 @@ const (
 	BorderTop
 	BorderRow
 	BorderBottom
+	BorderSection
 
-	BorderAllHorizontal = BorderTop | BorderRow | BorderBottom
+	BorderAllHorizontal = BorderTop | BorderRow | BorderBottom | BorderSection
 	BorderAllVertical   = BorderLeft | BorderColumn | BorderRight
 	BorderAll           = BorderAllHorizontal | BorderAllVertical
 )
@@ -31,17 +32,21 @@ type BorderRune int
 // borders). Can be configured on a table via the WithBorderRunes table option.
 // See DefaultBorderRunes for a mapping of these constants to actual runes.
 const (
-	BorderRuneHorizontal         BorderRune = iota // ─
-	BorderRuneVertical                             // │
-	BorderRuneCornerTopLeft                        // ┌
-	BorderRuneCornerTopRight                       // ┐
-	BorderRuneCornerBottomLeft                     // └
-	BorderRuneCornerBottomRight                    // └
-	BorderRuneIntersectionTop                      // ┬
-	BorderRuneIntersectionBottom                   // ┴
-	BorderRuneIntersectionLeft                     // ├
-	BorderRuneIntersectionRight                    // ┤
-	BorderRuneIntersectionCenter                   // ┼
+	BorderRuneHorizontal                BorderRune = iota // ─
+	BorderRuneVertical                                    // │
+	BorderRuneCornerTopLeft                               // ┌
+	BorderRuneCornerTopRight                              // ┐
+	BorderRuneCornerBottomLeft                            // └
+	BorderRuneCornerBottomRight                           // └
+	BorderRuneIntersectionTop                             // ┬
+	BorderRuneIntersectionBottom                          // ┴
+	BorderRuneIntersectionLeft                            // ├
+	BorderRuneIntersectionRight                           // ┤
+	BorderRuneIntersectionCenter                          // ┼
+	BorderRuneSectionHorizontal                           // ═
+	BorderRuneSectionIntersectionLeft                     // ╞
+	BorderRuneSectionIntersectionRight                    // ╡
+	BorderRuneSectionIntersectionCenter                   // ╪
 )
 
 // BorderRunes is a map of the BorderRune type to the actual rune that should
@@ -52,15 +57,19 @@ type BorderRunes map[BorderRune]rune
 // not explicitly overridden via table options. This is an exported variable to
 // allow overriding table borders globally.
 var DefaultBorderRunes = BorderRunes{
-	BorderRuneHorizontal:         '─',
-	BorderRuneVertical:           '│',
-	BorderRuneCornerTopLeft:      '┌',
-	BorderRuneCornerTopRight:     '┐',
-	BorderRuneCornerBottomLeft:   '└',
-	BorderRuneCornerBottomRight:  '┘',
-	BorderRuneIntersectionTop:    '┬',
-	BorderRuneIntersectionBottom: '┴',
-	BorderRuneIntersectionLeft:   '├',
-	BorderRuneIntersectionRight:  '┤',
-	BorderRuneIntersectionCenter: '┼',
+	BorderRuneHorizontal:                '─',
+	BorderRuneVertical:                  '│',
+	BorderRuneCornerTopLeft:             '┌',
+	BorderRuneCornerTopRight:            '┐',
+	BorderRuneCornerBottomLeft:          '└',
+	BorderRuneCornerBottomRight:         '┘',
+	BorderRuneIntersectionTop:           '┬',
+	BorderRuneIntersectionBottom:        '┴',
+	BorderRuneIntersectionLeft:          '├',
+	BorderRuneIntersectionRight:         '┤',
+	BorderRuneIntersectionCenter:        '┼',
+	BorderRuneSectionHorizontal:         '═',
+	BorderRuneSectionIntersectionLeft:   '╞',
+	BorderRuneSectionIntersectionRight:  '╡',
+	BorderRuneSectionIntersectionCenter: '╪',
 }

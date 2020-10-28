@@ -93,31 +93,31 @@ func (tb *tableBuilder) writeRowCells(cellLines [][]string, maxCellHeight int) {
 	}
 }
 
-func (tb *tableBuilder) writeBorderLine(left, junction, right BorderRune) {
+func (tb *tableBuilder) writeBorderLine(left, right, horizontal, junction BorderRune) {
 	tb.writeMarginSpaces()
 
 	if tb.borderMask.Has(BorderLeft) {
 		tb.writeBorderRune(left)
-		tb.writeBorderRuneN(BorderRuneHorizontal, tb.padding)
+		tb.writeBorderRuneN(horizontal, tb.padding)
 	}
 
 	for i, measure := range tb.measures {
-		line := strings.Repeat(string(tb.borderRunes[BorderRuneHorizontal]), measure.Maximum)
+		line := strings.Repeat(string(tb.borderRunes[horizontal]), measure.Maximum)
 
 		tb.writeBorderString(line)
 
 		if i < len(tb.measures)-1 {
-			tb.writeBorderRuneN(BorderRuneHorizontal, tb.padding)
+			tb.writeBorderRuneN(horizontal, tb.padding)
 
 			if tb.borderMask.Has(BorderColumn) {
 				tb.writeBorderRune(junction)
-				tb.writeBorderRuneN(BorderRuneHorizontal, tb.padding)
+				tb.writeBorderRuneN(horizontal, tb.padding)
 			}
 		}
 	}
 
 	if tb.borderMask.Has(BorderRight) {
-		tb.writeBorderRuneN(BorderRuneHorizontal, tb.padding)
+		tb.writeBorderRuneN(horizontal, tb.padding)
 		tb.writeBorderRune(right)
 	}
 

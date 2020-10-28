@@ -160,7 +160,7 @@ func (p *Progress) update(cursor *terminal.Cursor) {
 		table.AddRow(p.tableColumns(task)...)
 	}
 
-	tableHeight, err := table.Render()
+	tableHeight, err := table.RenderLines()
 	if err != nil {
 		panic(fmt.Errorf("failed to render task progress: %v", err))
 	}

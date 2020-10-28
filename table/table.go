@@ -88,12 +88,23 @@ func (t *Table) applyOptions(opts []Option) {
 	}
 }
 
-func (t *Table) mustFitWidth(cols []interface{}) {
-	if len(t.rows) == 0 || len(cols) == len(t.rows[0].cells) {
+// mustValidate validates that cols is of the same length as previously added
+// table rows and that the rowKind is allowed to add. Panics if validation
+// failed.
+func (t *Table) mustValidate(kind rowKind, cols []interface{}) {
+	if len(t.rows) == 0 {
 		return
 	}
 
-	panic(fmt.Sprintf("expected %d columns, got %d", len(t.rows[0].cells), len(cols)))
+	if len(cols) != len(t.rows[0].cells) {
+		panic(fmt.Sprintf("expected %d columns, got %d", len(t.rows[0].cells), len(cols)))
+	}
+
+	prevRow := t.rows[len(t.rows)-1]
+
+	if prevRow.kind > kind {
+		panic(fmt.Sprintf("cannot add %s row after %s row", kind, prevRow.kind))
+	}
 }
 
 // Reset resets the table by clearing all rows. This is useful for creating
@@ -105,18 +116,46 @@ func (t *Table) Reset() *Table {
 }
 
 // AddRow adds a row to the table. Panics if the number of columns does not
-// align with the number of columns of already existing table rows.
+// align with the number of columns of already existing table rows or if AddRow
+// is called after rows were added via AddFooter.
 //
 // Columns implementing console.Renderable are NOT formatted using the cell and
 // column specific options (e.g. style, alignment, word wrap) configured via
 // the table.With* and table.WithColumn* option funcs. This allows users to add
 // custom cell behaviour if needed.
 func (t *Table) AddRow(columns ...interface{}) *Table {
-	t.mustFitWidth(columns)
+	return t.addRow(rowKindNormal, columns)
+}
+
+// AddHeader adds a header row to the table. Panics if the number of columns
+// does not align with the number of columns of already existing table rows or
+// if AddHeader is called after rows were added via AddRow or AddFooter.
+//
+// Columns implementing console.Renderable are NOT formatted using the cell and
+// column specific options (e.g. style, alignment, word wrap) configured via
+// the table.With* and table.WithColumn* option funcs. This allows users to add
+// custom cell behaviour if needed.
+func (t *Table) AddHeader(columns ...interface{}) *Table {
+	return t.addRow(rowKindHeader, columns)
+}
+
+// AddFooter adds a footer row to the table. Panics if the number of columns
+// does not align with the number of columns of already existing table rows.
+//
+// Columns implementing console.Renderable are NOT formatted using the cell and
+// column specific options (e.g. style, alignment, word wrap) configured via
+// the table.With* and table.WithColumn* option funcs. This allows users to add
+// custom cell behaviour if needed.
+func (t *Table) AddFooter(columns ...interface{}) *Table {
+	return t.addRow(rowKindFooter, columns)
+}
+
+func (t *Table) addRow(kind rowKind, columns []interface{}) *Table {
+	t.mustValidate(kind, columns)
 
 	cells := t.makeCells(columns)
 
-	t.rows = append(t.rows, &tableRow{cells: cells})
+	t.rows = append(t.rows, &tableRow{kind: kind, cells: cells})
 
 	if t.cols == nil {
 		t.cols = make([]*tableCol, len(cells))
@@ -177,7 +216,18 @@ func (t *Table) calculateSpacing() (width, height int) {
 
 // Render renders the table to the underlying io.Writer. Returns the number of
 // lines rendered and an error if rendering failed.
-func (t *Table) Render() (int, error) {
+func (t *Table) RenderLines() (int, error) {
+	return t.render()
+}
+
+// Render renders the table to the underlying io.Writer. Returns an error if
+// rendering failed.
+func (t *Table) Render() error {
+	_, err := t.render()
+	return err
+}
+
+func (t *Table) render() (int, error) {
 	if len(t.cols) == 0 {
 		return 0, nil
 	}
@@ -195,7 +245,8 @@ func (t *Table) Render() (int, error) {
 	tb.Grow((len(t.rows) + spacingHeight) * (totalWidth + 1))
 
 	if t.borderMask.Has(BorderTop) {
-		tb.writeBorderLine(BorderRuneCornerTopLeft, BorderRuneIntersectionTop, BorderRuneCornerTopRight)
+		tb.writeBorderLine(BorderRuneCornerTopLeft, BorderRuneCornerTopRight,
+			BorderRuneHorizontal, BorderRuneIntersectionTop)
 	}
 
 	for i, row := range t.rows {
@@ -210,13 +261,22 @@ func (t *Table) Render() (int, error) {
 
 		tb.writeRowCells(cellLines, maxCellHeight)
 
-		if t.borderMask.Has(BorderRow) && i < len(t.rows)-1 {
-			tb.writeBorderLine(BorderRuneIntersectionLeft, BorderRuneIntersectionCenter, BorderRuneIntersectionRight)
+		if i >= len(t.rows)-1 {
+			continue
+		}
+
+		if t.borderMask.Has(BorderSection) && (row.kind != rowKindNormal || row.kind != t.rows[i+1].kind) {
+			tb.writeBorderLine(BorderRuneSectionIntersectionLeft, BorderRuneSectionIntersectionRight,
+				BorderRuneSectionHorizontal, BorderRuneSectionIntersectionCenter)
+		} else if t.borderMask.Has(BorderRow) {
+			tb.writeBorderLine(BorderRuneIntersectionLeft, BorderRuneIntersectionRight,
+				BorderRuneHorizontal, BorderRuneIntersectionCenter)
 		}
 	}
 
 	if t.borderMask.Has(BorderBottom) {
-		tb.writeBorderLine(BorderRuneCornerBottomLeft, BorderRuneIntersectionBottom, BorderRuneCornerBottomRight)
+		tb.writeBorderLine(BorderRuneCornerBottomLeft, BorderRuneCornerBottomRight,
+			BorderRuneHorizontal, BorderRuneIntersectionBottom)
 	}
 
 	return tb.render()
@@ -378,7 +438,27 @@ func (t *Table) makeTextRenderable(v interface{}, colIdx int) console.Renderable
 	return r
 }
 
+type rowKind int
+
+func (k rowKind) String() string {
+	switch k {
+	case rowKindHeader:
+		return "header"
+	case rowKindFooter:
+		return "footer"
+	default:
+		return "normal"
+	}
+}
+
+const (
+	rowKindHeader rowKind = iota
+	rowKindNormal
+	rowKindFooter
+)
+
 type tableRow struct {
+	kind  rowKind
 	cells []console.Renderable
 }
 

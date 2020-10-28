@@ -22,7 +22,7 @@ func TestTable_Render_Reset(t *testing.T) {
 	table := New(&buf)
 	table.AddRow("foo\nbarbaz", "qux").AddRow("one", "two")
 
-	nlines, err := table.Render()
+	nlines, err := table.RenderLines()
 	assert.NoError(err)
 	assert.Equal(3, nlines)
 	assert.Equal("foo    qux\nbarbaz    \none    two\n", buf.String())
@@ -32,7 +32,7 @@ func TestTable_Render_Reset(t *testing.T) {
 
 	table.AddRow("foo", "bar", "baz")
 
-	nlines, err = table.Render()
+	nlines, err = table.RenderLines()
 	assert.NoError(err)
 	assert.Equal(1, nlines)
 	assert.Equal("foo bar baz\n", buf.String())
@@ -49,6 +49,17 @@ func TestTable_AddRow_Panic(t *testing.T) {
 	New(&buf).AddRow("foo", "bar").AddRow("baz")
 }
 
+func TestTable_AddRow_PanicOrder(t *testing.T) {
+	defer func() {
+		if err := recover(); err == nil {
+			t.Fatal("expected panic")
+		}
+	}()
+
+	var buf bytes.Buffer
+	New(&buf).AddRow("foo", "bar").AddHeader("baz", "qux")
+}
+
 type Suite struct {
 	suite.Suite
 }
@@ -62,8 +73,7 @@ func (s *Suite) testTableRender(factory func(w io.Writer) *Table, expected strin
 
 	tab := factory(&buf)
 
-	_, err := tab.Render()
-	s.NoError(err)
+	s.NoError(tab.Render())
 	s.Equal(expected, buf.String())
 }
 
@@ -196,6 +206,54 @@ foo.----.##---.qux
 ├────────┼────────┼────────┤
 │ 1      │ 2      │ foo    │
 └────────┴────────┴────────┘
+`,
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w, WithBorderMask(BorderAll)).
+				AddHeader("foo", "bar", "baz").
+				AddHeader("one", "two", "three").
+				AddRow("foo", "bar", "baz").
+				AddRow("foofoo", "barbar", "bazbaz").
+				AddRow(12, 13, 14).
+				AddFooter(1, 2, "foo")
+		},
+		`
+┌────────┬────────┬────────┐
+│ foo    │ bar    │ baz    │
+╞════════╪════════╪════════╡
+│ one    │ two    │ three  │
+╞════════╪════════╪════════╡
+│ foo    │ bar    │ baz    │
+├────────┼────────┼────────┤
+│ foofoo │ barbar │ bazbaz │
+├────────┼────────┼────────┤
+│ 12     │ 13     │ 14     │
+╞════════╪════════╪════════╡
+│ 1      │ 2      │ foo    │
+└────────┴────────┴────────┘
+`,
+	)
+	s.testTableRender(
+		func(w io.Writer) *Table {
+			return New(w, WithBorderMask(BorderSection|BorderColumn)).
+				AddHeader("foo", "bar", "baz").
+				AddHeader("one", "two", "three").
+				AddRow("foo", "bar", "baz").
+				AddRow("foofoo", "barbar", "bazbaz").
+				AddRow(12, 13, 14).
+				AddFooter(1, 2, "foo")
+		},
+		`
+foo    │ bar    │ baz   
+═══════╪════════╪═══════
+one    │ two    │ three 
+═══════╪════════╪═══════
+foo    │ bar    │ baz   
+foofoo │ barbar │ bazbaz
+12     │ 13     │ 14    
+═══════╪════════╪═══════
+1      │ 2      │ foo   
 `,
 	)
 	s.testTableRender(
